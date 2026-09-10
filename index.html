@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#16202A">
 <title>판촉물 관리대장</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%20%22%ED%8C%90%EC%B4%89%EB%AC%BC%20%EA%B4%80%EB%A6%AC%EB%8C%80%EC%9E%A5%22%2C%20%22short_name%22%3A%20%22%ED%8C%90%EC%B4%89%EB%AC%BC%22%2C%20%22start_url%22%3A%20%22./%22%2C%20%22display%22%3A%20%22standalone%22%2C%20%22background_color%22%3A%20%22%23ECEDE8%22%2C%20%22theme_color%22%3A%20%22%2316202A%22%2C%20%22lang%22%3A%20%22ko%22%2C%20%22icons%22%3A%20%5B%7B%22src%22%3A%20%22data%3Aimage/svg%2Bxml%2C%253Csvg%2520xmlns%253D%2522http%253A//www.w3.org/2000/svg%2522%2520viewBox%253D%25220%25200%2520512%2520512%2522%253E%253Crect%2520width%253D%2522512%2522%2520height%253D%2522512%2522%2520rx%253D%2522112%2522%2520fill%253D%2522%252316202A%2522/%253E%253Crect%2520x%253D%2522118%2522%2520y%253D%2522150%2522%2520width%253D%2522276%2522%2520height%253D%252276%2522%2520rx%253D%252214%2522%2520fill%253D%2522%2523D6382B%2522/%253E%253Crect%2520x%253D%2522118%2522%2520y%253D%2522252%2522%2520width%253D%2522276%2522%2520height%253D%2522110%2522%2520rx%253D%252214%2522%2520fill%253D%2522%2523E4D9C3%2522/%253E%253Crect%2520x%253D%2522238%2522%2520y%253D%2522150%2522%2520width%253D%252236%2522%2520height%253D%2522212%2522%2520fill%253D%2522%252316202A%2522/%253E%253C/svg%253E%22%2C%20%22sizes%22%3A%20%22any%22%2C%20%22type%22%3A%20%22image/svg%2Bxml%22%2C%20%22purpose%22%3A%20%22any%20maskable%22%7D%5D%7D">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%22112%22%20fill%3D%22%2316202A%22/%3E%3Crect%20x%3D%22118%22%20y%3D%22150%22%20width%3D%22276%22%20height%3D%2276%22%20rx%3D%2214%22%20fill%3D%22%23D6382B%22/%3E%3Crect%20x%3D%22118%22%20y%3D%22252%22%20width%3D%22276%22%20height%3D%22110%22%20rx%3D%2214%22%20fill%3D%22%23E4D9C3%22/%3E%3Crect%20x%3D%22238%22%20y%3D%22150%22%20width%3D%2236%22%20height%3D%22212%22%20fill%3D%22%2316202A%22/%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%22112%22%20fill%3D%22%2316202A%22/%3E%3Crect%20x%3D%22118%22%20y%3D%22150%22%20width%3D%22276%22%20height%3D%2276%22%20rx%3D%2214%22%20fill%3D%22%23D6382B%22/%3E%3Crect%20x%3D%22118%22%20y%3D%22252%22%20width%3D%22276%22%20height%3D%22110%22%20rx%3D%2214%22%20fill%3D%22%23E4D9C3%22/%3E%3Crect%20x%3D%22238%22%20y%3D%22150%22%20width%3D%2236%22%20height%3D%22212%22%20fill%3D%22%2316202A%22/%3E%3C/svg%3E">
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css');
 
@@ -267,7 +267,18 @@ tbody tr:hover{background:#FAFAF7}
 <div class="tip" id="tip"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="config.js"></script>
+<script>
+/* ============================================================
+   Supabase 접속 정보
+   나중에 프로젝트를 바꾸거나 키를 재발급하면 이 두 줄만 고치면 됩니다.
+   publishable key 는 공개돼도 되는 저권한 키입니다.
+   sb_secret_ / service_role 로 시작하는 키는 절대 넣지 마세요.
+   ============================================================ */
+window.CONFIG = {
+  SUPABASE_URL:      "https://vnlggpzilvahplptzyfb.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_Fuyw0iVyDg2EAQ1vscQaOQ_7Ynwp5L8"
+};
+</script>
 <script>
 /* ============================================================
    판촉물 관리 — 애플리케이션 로직
