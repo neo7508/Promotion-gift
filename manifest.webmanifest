@@ -1,0 +1,12 @@
+{
+  "name": "판촉물 관리대장",
+  "short_name": "판촉물",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ECEDE8",
+  "theme_color": "#16202A",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
