@@ -122,12 +122,12 @@ main{padding:26px 30px 60px;max-width:1180px}
 .strip .hd{display:flex;align-items:baseline;gap:8px;padding:11px 15px 0;font-size:13px;font-weight:700}
 .strip .hd span{font-weight:400;font-size:12.5px;color:var(--muted)}
 .strip .hd .sp{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:400}
-.strip .lane{display:flex;gap:0;overflow-x:auto;padding:10px 8px 13px}
+.strip .lane{display:flex;flex-wrap:wrap;gap:16px 10px;padding:10px 15px 14px}
 .strip .lane::-webkit-scrollbar{height:6px}
 .strip .lane::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
-.chip{flex:none;width:138px;padding:0 15px;border-right:1px solid var(--line2);transition:width .16s}
+.chip{flex:none;width:132px;transition:width .16s}
 .chip.out{width:69px;padding:0 9px}
-.chip:last-child{border-right:none}
+
 .chip .n{font-size:12.5px;color:var(--muted);line-height:1.35;height:2.7em;overflow:hidden}
 .chip .q{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-top:3px}
 .chip .q u{font-size:11.5px;font-weight:500;color:var(--muted);text-decoration:none;margin-left:2px}
@@ -286,7 +286,15 @@ window.CONFIG = {
    없습니다. 접속 정보는 config.js 에 있습니다.
    ============================================================ */
 
+let RECOVERY = /type=recovery/.test(location.hash) || /[?&]code=/.test(location.search);
 const sb = window.supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+
+// 재설정 메일 링크로 들어오면 어떤 방식이든 새 비밀번호 화면으로
+sb.auth.onAuthStateChange(ev => {
+  if(ev === 'PASSWORD_RECOVERY'){
+    RECOVERY = true; S.me = null; S.auth = 'newpw'; S.loading = false; render();
+  }
+});
 
 const S = {
   me:null, items:[], logs:[], users:[], moves:[],
@@ -312,6 +320,7 @@ function fail(e){ console.error(e); toast(e?.message || '처리 중 오류가 �
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
+  if(RECOVERY){ S.auth = 'newpw'; S.loading = false; return render(); }
   if(!session){ S.me = null; S.loading = false; return render(); }
 
   const { data:prof, error } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
@@ -349,6 +358,30 @@ async function doSignup(){
   const { error } = await sb.auth.signUp({ email, password: pw, options:{ data:{ name } } });
   if(error) return toast(error.message.includes('already') ? '이미 가입된 이메일입니다' : error.message);
   S.auth = 'pending'; render();
+}
+
+function openReset(mode){ S.resetMode = mode; S.auth = 'reset'; render(); }
+
+async function doResetSend(){
+  const email = ($('r_mail').value || '').trim();
+  if(!email) return toast('회사 이메일을 입력해주세요');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('이메일 형식을 확인해주세요');
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if(error) return fail(error);
+  // 등록된 계정인지 여부는 알려주지 않습니다 (계정 존재 확인 통로가 되므로)
+  S.sentTo = email; S.auth = 'sent'; render();
+}
+
+async function doNewPw(){
+  const a = $('np1').value || '', b = $('np2').value || '';
+  if(a.length < 8) return toast('비밀번호는 8자 이상이어야 합니다');
+  if(a !== b)      return toast('비밀번호가 서로 다릅니다');
+  const { error } = await sb.auth.updateUser({ password: a });
+  if(error) return fail(error);
+  history.replaceState(null, '', location.pathname);   // 주소창의 재설정 토큰 제거
+  toast('비밀번호가 변경됐습니다');
+  await sb.auth.signOut();
+  S.auth = 'login'; S.me = null; render();
 }
 
 async function logout(){ await sb.auth.signOut(); S.me = null; S.auth = 'login'; render(); }
@@ -413,7 +446,12 @@ function authView(){
       <div class="field"><label>비밀번호</label>
         <input id="lpw" type="password" onkeydown="if(event.key==='Enter')doLogin()"></div>
       <button class="btn primary full" onclick="doLogin()">로그인</button>
-      <div class="linkline">계정이 없으신가요? <b onclick="S.auth='signup';render()">가입 신청</b></div>
+      <div class="linkline" style="margin-top:14px">
+        <b onclick="openReset('change')">비밀번호 변경</b>
+        <span style="color:var(--line);margin:0 8px">|</span>
+        <b onclick="openReset('forgot')">비밀번호 초기화</b>
+      </div>
+      <div class="linkline" style="margin-top:8px">계정이 없으신가요? <b onclick="S.auth='signup';render()">가입 신청</b></div>
     </div>`;
 
   if(S.auth === 'signup') panel = `
@@ -428,6 +466,44 @@ function authView(){
       </div>
       <button class="btn primary full" onclick="doSignup()">가입 신청하기</button>
       <div class="linkline">이미 계정이 있나요? <b onclick="S.auth='login';render()">로그인</b></div>
+    </div>`;
+
+  if(S.auth === 'reset'){
+    const chg = S.resetMode === 'change';
+    panel = `
+    <div class="auth-box">
+      <h2>${chg ? '비밀번호 변경' : '비밀번호 초기화'}</h2>
+      <p class="sub">${chg
+        ? '가입하신 회사 이메일로 변경 링크를 보내드립니다. 링크에서 새 비밀번호를 정하면 바로 바뀝니다.'
+        : '비밀번호가 기억나지 않을 때 쓰세요. 회사 이메일로 초기화 링크를 보내드립니다.'}</p>
+      <div class="field"><label>회사 이메일</label>
+        <input id="r_mail" type="email" placeholder="name@company.com" onkeydown="if(event.key==='Enter')doResetSend()"></div>
+      <button class="btn primary full" onclick="doResetSend()">${chg ? '변경 링크 받기' : '초기화 링크 받기'}</button>
+      <div class="linkline" style="margin-top:16px">
+        <b onclick="openReset('${chg ? 'forgot' : 'change'}')">${chg ? '비밀번호가 기억나지 않나요?' : '비밀번호를 알고 있다면 변경하기'}</b>
+      </div>
+      <div class="linkline" style="margin-top:8px"><b onclick="S.auth='login';render()">로그인 화면으로</b></div>
+    </div>`;
+  }
+
+  if(S.auth === 'sent') panel = `
+    <div class="pending">
+      <div class="mark">✉</div>
+      <h2>메일을 보냈습니다</h2>
+      <p><b style="color:var(--ink)">${esc(S.sentTo||'')}</b><br>
+         메일함에서 링크를 눌러 새 비밀번호를 정해주세요.<br>
+         몇 분 안에 오지 않으면 스팸함도 확인해보세요.</p>
+      <div style="margin-top:20px"><button class="btn ghost sm" onclick="S.auth='login';render()">로그인 화면으로</button></div>
+    </div>`;
+
+  if(S.auth === 'newpw') panel = `
+    <div class="auth-box">
+      <h2>새 비밀번호 설정</h2>
+      <p class="sub">앞으로 이 비밀번호로 로그인합니다. 8자 이상으로 정해주세요.</p>
+      <div class="field"><label>새 비밀번호</label><input id="np1" type="password" placeholder="8자 이상"></div>
+      <div class="field"><label>비밀번호 확인</label><input id="np2" type="password"
+        onkeydown="if(event.key==='Enter')doNewPw()"></div>
+      <button class="btn primary full" onclick="doNewPw()">비밀번호 변경</button>
     </div>`;
 
   if(S.auth === 'pending') panel = `
@@ -529,7 +605,7 @@ async function uploadPhoto(input, id){
 /* ---------------- 품목별 재고 띠 ---------------- */
 
 function stockStrip(){
-  const list = S.items.filter(i => i.active).sort((a,b) => {
+  const list = S.items.filter(i => i.active && stock(i) > 0).sort((a,b) => {
     const A = stock(a), B = stock(b);
     if((A===0) !== (B===0)) return A===0 ? 1 : -1;
     return A - B;
@@ -710,16 +786,9 @@ function vLedger(){
         <td>${esc(l.comp)}</td>
         <td><div class="tagset">${l.lines.map(([id,q]) => `<span class="tag">${esc(item(id)?.name||'삭제된 품목')} <b>${q}</b></span>`).join('')}</div></td>
         <td class="memo">${esc(l.memo||'')}</td>
-        <td class="c">${editable(l) ? `<button class="btn ghost sm" onclick="delLog(${l.id})">삭제</button>` : ''}</td>
+        <td class="c">${editable(l) ? `<button class="btn ghost sm" onclick="openMod('log',${l.id})">수정</button>` : ''}</td>
       </tr>`).join('')}</tbody></table>` : '<div class="empty">조건에 맞는 내역이 없습니다.</div>'}
     </div>`;
-}
-
-async function delLog(id){
-  if(!confirm('이 내역을 삭제하시겠습니까? 차감된 재고가 되돌아갑니다.')) return;
-  const { error } = await sb.from('handouts').delete().eq('id', id);
-  if(error) return fail(error);
-  await refresh(); toast('삭제됐습니다');
 }
 
 function exportCSV(){
@@ -812,13 +881,14 @@ function vItems(){
   return `<div class="head"><div><h1>품목 관리</h1><p>시기별로 새 판촉물을 등록하면 신청 화면에 바로 나타납니다.</p></div></div>
     <div class="split">
       <div class="panel"><h3>등록된 품목 <span class="sp">${S.items.length}종</span></h3>
-        ${S.items.length ? `<table><thead><tr><th style="width:64px">사진</th><th>품목명</th><th class="r">단가</th><th class="r">구매</th><th class="r">배포</th><th class="r">재고</th><th>보관</th><th class="c">노출</th></tr></thead>
+        ${S.items.length ? `<table><thead><tr><th style="width:64px">사진</th><th>품목명</th><th class="r">단가</th><th class="r">구매</th><th class="r">배포</th><th class="r">재고</th><th>보관</th><th class="c">노출</th><th class="c" style="width:58px">관리</th></tr></thead>
         <tbody>${S.items.map(i => `<tr>
           <td style="width:64px">${photoBox(i,'44px',true)}</td>
           <td><b>${esc(i.name)}</b><div class="memo">${esc(i.batch||'')}</div></td>
           <td class="r num">${won(i.price)}</td><td class="r num">${i.buy}</td><td class="r num">${i.out}</td>
           <td class="r num"><b>${stock(i)}</b></td><td>${esc(i.loc||'-')}</td>
           <td class="c"><span class="badge ${i.active?'b-ok':'b-no'}" style="cursor:pointer" onclick="tog(${i.id},${!i.active})">${i.active?'노출':'숨김'}</span></td>
+          <td class="c"><button class="btn ghost sm" onclick="openMod('item',${i.id})">수정</button></td>
         </tr>`).join('')}</tbody></table>` : '<div class="empty">등록된 품목이 없습니다.</div>'}
       </div>
       <div class="panel"><h3>새 품목 등록</h3><div class="pad form">
@@ -946,12 +1016,152 @@ async function swapRole(id, role){
 
 /* ---------------- 입고 · 보정 ---------------- */
 
-function openMod(t,id){ S.modal = { t, id }; render(); }
-function closeMod(){ S.modal = null; render(); }
+function openMod(t,id){ S.modal = { t, id }; ECART = {}; render(); }
+function closeMod(){ S.modal = null; ECART = {}; render(); }
 addEventListener('keydown', e => { if(e.key === 'Escape' && S.modal) closeMod(); });
+
+function modalShell(title, subtitle, body){
+  return `<div class="ov" onclick="if(event.target===this)closeMod()"><div class="modal">
+      <div class="mh"><b>${title}</b><span class="memo">${esc(subtitle)}</span>
+        <button class="x" onclick="closeMod()">×</button></div>
+      <div class="pad form">${body}</div>
+    </div></div>`;
+}
+
+/* ---- 품목 수정 · 삭제 ---- */
+function itemModal(){
+  const i = item(S.modal.id); if(!i) return '';
+  const used = i.out > 0 || S.logs.some(l => l.lines.some(([id]) => id === i.id));
+  return modalShell('품목 수정', i.name, `
+    <div><label>품목명</label><input id="e_name" value="${esc(i.name)}"></div>
+    <div class="row2">
+      <div><label>구매 단가 (원)</label><input id="e_price" class="num" value="${i.price||0}"></div>
+      <div><label>보관 위치</label><input id="e_loc" value="${esc(i.loc||'')}" placeholder="런던1 / 탕비실 등"></div>
+    </div>
+    <div><label>구매 차수</label><input id="e_batch" value="${esc(i.batch||'')}" placeholder="26년 12월 구매"></div>
+    <div><label>참고 링크 (선택)</label><input id="e_link" value="${esc(i.link||'')}" placeholder="https://"></div>
+    <div class="now"><span>현재 재고</span><b class="num">${stock(i)}개</b></div>
+    <div class="hint">구매·배포 수량은 입고와 사용 신청 기록으로 계산됩니다. 수량을 바꾸려면 입고 추가나 수량 보정을 쓰세요.</div>
+    <button class="btn primary full" onclick="saveItem()">저장</button>
+    <div style="border-top:1px solid var(--line2);margin-top:4px;padding-top:12px">
+      ${used
+        ? `<div class="hint" style="color:var(--amber)">배포 이력이 있어 삭제할 수 없습니다. 기록이 함께 사라지기 때문입니다. 더 쓰지 않을 품목은 목록에서 <b>숨김</b>으로 바꿔주세요.</div>`
+        : `<button class="btn ghost full" style="color:var(--accent)" onclick="delItem()">품목 삭제</button>
+           <div class="hint">배포 이력이 없어 삭제할 수 있습니다. 입고·보정 기록도 함께 지워집니다.</div>`}
+    </div>`);
+}
+
+async function saveItem(){
+  const i = item(S.modal.id);
+  const n = ($('e_name').value || '').trim();
+  if(!n) return toast('품목명을 입력해주세요');
+  try{
+    const { error } = await sb.from('items').update({
+      name: n,
+      unit_price: parseInt($('e_price').value) || 0,
+      location: ($('e_loc').value || '').trim() || null,
+      batch:    ($('e_batch').value || '').trim() || null,
+      link:     ($('e_link').value || '').trim() || null
+    }).eq('id', i.id);
+    if(error) throw error;
+    closeMod(); await refresh(); toast('품목 정보가 수정됐습니다');
+  }catch(e){ fail(e); }
+}
+
+async function delItem(){
+  const i = item(S.modal.id);
+  if(!confirm(`'${i.name}' 품목을 삭제하시겠습니까? 되돌릴 수 없습니다.`)) return;
+  try{
+    const { error } = await sb.from('items').delete().eq('id', i.id);
+    if(error) throw new Error('배포 이력이 있어 삭제할 수 없습니다. 숨김으로 바꿔주세요.');
+    closeMod(); await refresh(); toast('품목이 삭제됐습니다');
+  }catch(e){ fail(e); }
+}
+
+/* ---- 사용 내역 수정 · 삭제 ---- */
+let ECART = {};
+const curQty = (l,id) => { const f = l.lines.find(([x]) => x === id); return f ? f[1] : 0; };
+
+function logModal(){
+  const l = S.logs.find(x => x.id === S.modal.id); if(!l) return '';
+  const cand = S.items.filter(i => i.active && (curQty(l,i.id) > 0 || stock(i) > 0));
+  const rows = cand.map(i => {
+    const was = curQty(l,i.id), max = stock(i) + was, q = ECART[i.id] ?? was;
+    return `<div class="pick">
+      <div><div class="nm">${esc(i.name)}</div><div class="st">최대 ${max}개 ${was?`· 기존 ${was}개`:''}</div></div>
+      <div class="stepper">
+        <button onclick="ebump(${i.id},-1,${max})">−</button>
+        <input class="num" value="${q}" onchange="esetq(${i.id},this.value,${max})">
+        <button onclick="ebump(${i.id},1,${max})">＋</button>
+      </div></div>`;
+  }).join('');
+  return modalShell('사용 내역 수정', `No.${l.id} · ${l.who}`, `
+    <div class="row2">
+      <div><label>배포일</label><input type="date" id="e_date" value="${l.date}"></div>
+      <div><label>담당자</label><input value="${esc(l.who)}" disabled style="background:#F7F8F5;color:var(--muted)"></div>
+    </div>
+    <div><label>방문업체 · 대상</label><input id="e_comp" value="${esc(l.comp||'')}"></div>
+    <div><label>비고</label><textarea id="e_memo" rows="2">${esc(l.memo||'')}</textarea></div>
+    <div><label>품목 · 수량</label>
+      <div style="border:1px solid var(--line2);border-radius:9px;padding:4px 12px">${rows || '<div class="empty">선택 가능한 품목이 없습니다.</div>'}</div>
+      <div class="hint">0으로 내리면 그 품목은 이 건에서 빠집니다.</div>
+    </div>
+    <button class="btn primary full" onclick="saveLog()">저장</button>
+    <div style="border-top:1px solid var(--line2);margin-top:4px;padding-top:12px">
+      <button class="btn ghost full" style="color:var(--accent)" onclick="delLog()">이 내역 삭제</button>
+      <div class="hint">삭제하면 차감된 재고가 되돌아갑니다.</div>
+    </div>`);
+}
+
+function ebump(id,d,max){
+  const l = S.logs.find(x => x.id === S.modal.id);
+  ECART[id] = Math.max(0, Math.min(max, (ECART[id] ?? curQty(l,id)) + d)); render();
+}
+function esetq(id,v,max){ ECART[id] = Math.max(0, Math.min(max, parseInt(v)||0)); render(); }
+
+async function saveLog(){
+  const l = S.logs.find(x => x.id === S.modal.id); if(!l) return;
+  const comp = ($('e_comp').value || '').trim();
+  if(!comp) return toast('방문업체를 입력해주세요');
+
+  const next = [];
+  S.items.forEach(i => {
+    const q = ECART[i.id] ?? curQty(l,i.id);
+    if(q > 0) next.push([i.id, q]);
+  });
+  if(!next.length) return toast('품목을 하나 이상 선택해주세요');
+
+  try{
+    const { error:e1 } = await sb.from('handouts').update({
+      handout_date: $('e_date').value,
+      company: comp,
+      memo: ($('e_memo').value || '').trim() || null
+    }).eq('id', l.id);
+    if(e1) throw e1;
+
+    // 품목줄은 지우고 다시 넣는다 (재고 검사 트리거가 새 수량으로 다시 확인)
+    const { error:e2 } = await sb.from('handout_lines').delete().eq('handout_id', l.id);
+    if(e2) throw e2;
+    const { error:e3 } = await sb.from('handout_lines')
+      .insert(next.map(([item_id,qty]) => ({ handout_id:l.id, item_id, qty })));
+    if(e3) throw e3;
+
+    closeMod(); await refresh(); toast('사용 내역이 수정됐습니다');
+  }catch(e){ fail(e); await refresh(); }
+}
+
+async function delLog(){
+  const l = S.logs.find(x => x.id === S.modal.id); if(!l) return;
+  if(!confirm('이 내역을 삭제하시겠습니까? 차감된 재고가 되돌아갑니다.')) return;
+  const { error } = await sb.from('handouts').delete().eq('id', l.id);
+  if(error) return fail(error);
+  closeMod(); await refresh(); toast('내역이 삭제되고 재고가 복구됐습니다');
+}
 
 function modalView(){
   if(!S.modal) return '';
+  if(S.modal.t === 'item') return itemModal();
+  if(S.modal.t === 'log')  return logModal();
   const i = item(S.modal.id); if(!i) return '';
   const s = stock(i), isIn = S.modal.t === 'in';
   const hist = S.moves.filter(m => m.item === i.id).slice(0,4);
@@ -1054,8 +1264,9 @@ function render(){
 
 /* 전역 노출 (인라인 onclick에서 호출) */
 Object.assign(window, {
-  S, doLogin, doSignup, logout, go, bump, setq, save, delLog, exportCSV,
+  S, doLogin, doSignup, openReset, doResetSend, doNewPw, logout, go, bump, setq, save, delLog, exportCSV,
   tog, addItem, previewNew, uploadPhoto, setStatus, swapRole,
+  saveItem, delItem, saveLog, ebump, esetq,
   openMod, closeMod, doIn, doAdj, showDiff, render
 });
 
